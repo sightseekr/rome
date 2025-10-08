@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Ultimate Map: Rome</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js/dist/fuse.min.js"></script>
+<style>
+  body { margin: 0; padding: 0; font-family: sans-serif; }
+  #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+  .mapboxgl-popup-content {
+    background-color: rgba(255, 255, 255, 1) !important;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: sans-serif;
+    max-width: 220px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+  }
+  .custom-popup strong {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .custom-popup p {
+    font-size: 0.85em;
+    font-style: italic;
+    margin: 0 0 6px;
+  }
+  .custom-popup .directions-btn,
+  .custom-popup .mark-visited-btn {
+    all: unset;
+    background-color: #e9a317;
+    color: white;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 16px;
+    cursor: pointer;
+    font-size: 0.85em;
+    display: inline-flex;
+    align-items: center;
+    min-height: 25px;
+    max-height: 26px;
+    gap: 5px;
+    text-decoration: none;
+  }
+  .custom-popup .directions-btn:hover {
+    background-color: #a88021;
+  }
+  .free-entry-btn {
+  all: unset;                  /* remove default button styles */
+  display: inline-block;
+  background-color: #c1e1c1;   /* light green to indicate safe / free */
+  color: #2d6a2d;              /* darker green text for contrast */
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85em;
+  font-weight: bold;
+  text-align: center;
+  cursor: not-allowed;          /* shows clearly it’s not clickable */
+  opacity: 0.8;                 /* slightly muted to show “disabled” */
+  pointer-events: none;          /* prevent any clicks */
+}
+
+  #search-container {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    width: 90%;
+    max-width: 400px;
+  }
+  #search {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 1em;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  #suggestions {
+    background: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    max-height: 200px;
+    overflow-y: auto;
+    position: absolute;
+    width: 100%;
+    z-index: 2;
+  }
+  .suggestion {
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .suggestion:hover {
+    background: #f0f0f0;
+  }
+  .no-results {
+    padding: 8px 12px;
+    color: #666;
+    font-style: italic;
+  }
+  #layer-toggle {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.9em;
+    z-index: 2;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  #layer-toggle h3 {
+    margin: 0 0 8px;
+    font-size: 1em;
+  }
+  #layer-toggle label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+    gap: 6px;
+    cursor: pointer;
+  }
+  #layer-toggle .legend-icon {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+  .icon {
+    display: inline-block;
+    background-image: url('https://api.mapbox.com/styles/v1/sightseekr/cmggs7osj00ii01sa77nk4vy0/sprite.png?access_token=pk.eyJ1Ijoic2lnaHRzZWVrciIsImEiOiJjbWJheDU5dWwwbjZqMmxzYjRqaW0wZ2FoIn0.XjR_Z_6vL3dcXrVECelgiA');
+    background-repeat: no-repeat;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .icon-cafe {
+    background-position: -32px -325px;
+    width: 20px;
+    height: 20px;
+  }
+  .icon-restaurant {
+    background-position: -380px -405px;
+    width: 20px;
+    height: 20px;
+  }
+  .icon-bar {
+    background-position: -264px -305px;
+    width: 20px;
+    height: 20px;
+  }
+  /* --- Legend wrapper for green/blue circles --- */
+  #layer-toggle .icon-cameraicon,
+  #layer-toggle .icon-landmarkrome {
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  /* Sightseeing: green circle */
+  #layer-toggle .icon-cameraicon {
+    background-color: #014d0d;
+  }
+
+  /* Landmarks: blue circle */
+  #layer-toggle .icon-landmarkrome {
+    background-color: #107c17;
+  }
+
+  /* --- Pseudo-elements for sprite icons --- */
+  #layer-toggle .icon-cameraicon::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 64px;
+    height: 64px;
+    background-image: url('https://api.mapbox.com/styles/v1/sightseekr/cmggs7osj00ii01sa77nk4vy0/sprite.png?access_token=pk.eyJ1Ijoic2lnaHRzZWVrciIsImEiOiJjbWJheDU5dWwwbjZqMmxzYjRqaW0wZ2FoIn0.XjR_Z_6vL3dcXrVECelgiA');
+    background-repeat: no-repeat;
+    background-position: 0px 0px; /* camera icon frame */
+    transform: translate(-50%, -50%) scale(0.45); /* slightly bigger */
+    transform-origin: center center;
+    pointer-events: none;
+  }
+
+  #layer-toggle .icon-landmarkrome::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 64px;
+    height: 64px;
+    background-image: url('https://api.mapbox.com/styles/v1/sightseekr/cmggs7osj00ii01sa77nk4vy0/sprite.png?access_token=pk.eyJ1Ijoic2lnaHRzZWVrciIsImEiOiJjbWJheDU5dWwwbjZqMmxzYjRqaW0wZ2FoIn0.XjR_Z_6vL3dcXrVECelgiA');
+    background-repeat: no-repeat;
+    background-position: -64px 0px; /* landmark icon frame */
+    transform: translate(-50%, -50%) scale(0.34); /* unchanged */
+    transform-origin: center center;
+    pointer-events: none;
+  }
+
+  /* Ensure background-size works */
+  #layer-toggle .icon-cameraicon,
+  #layer-toggle .icon-landmarkrome {
+    background-size: auto;
+    background-repeat: no-repeat;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="search-container">
+  <input type="text" id="search" placeholder="Find a Sightseekr recommendation in Rome..." />
+  <div id="suggestions"></div>
+</div>
+<div id="layer-toggle">
+  <h3>Sightseekr Recommended...</h3>
+  <label><input type="checkbox" id="toggle-landmarks" checked> <span class="icon icon-landmarkrome"></span> Main Landmarks</label><br>
+  <label><input type="checkbox" id="toggle-sightseeing" checked> <span class="icon icon-cameraicon"></span> Sightseeing</label><br>
+  <label><input type="checkbox" id="toggle-restaurants" checked> <span class="icon icon-restaurant"></span> Restaurants</label><br>
+  <label><input type="checkbox" id="toggle-bars" checked> <span class="icon icon-bar"></span> Bars</label><br>
+  <label><input type="checkbox" id="toggle-cafes" checked> <span class="icon icon-cafe"></span> Cafes & Quick Bites</label>
+</div>
+
+<script>
+  mapboxgl.accessToken = 'pk.eyJ1Ijoic2lnaHRzZWVrciIsImEiOiJjbWJheDU5dWwwbjZqMmxzYjRqaW0wZ2FoIn0.XjR_Z_6vL3dcXrVECelgiA';
+
+  const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/sightseekr/cmggs7osj00ii01sa77nk4vy0',
+
+  });
+
+  map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+  map.addControl(new mapboxgl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showUserHeading: true
+}), 'bottom-right');
+
+const savedPoints = [
+  { 
+    name: "Colosseum",
+    tags: ["landmark", "ancient Rome", "history", "architecture", "sightseeing", "amphitheatre", "cultural", "ticketed"],
+    description: "A wonder of the world and an absolute must-see, this Roman amphitheatre will blow you away.",
+    coordinates: [12.4922309, 41.8902102]
+  },
+  { 
+    name: "Roman Forum",
+    tags: ["landmark", "ruins", "ancient Rome", "history", "architecture", "cultural", "sightseeing", "ticketed"],
+    description: "If you've bought tickets to the Colosseum, you can also explore the Roman Forum! Head here to be transported back to Ancient Rome and see countless historical ruins, buildings and artefacts.",
+    coordinates: [12.4864378, 41.8920906]
+  },
+  { 
+    name: "Vatican City",
+    tags: ["landmark", "religious", "culture", "sightseeing", "free entry", "city-state", "iconic", "historical"],
+    description: "We're not promising you'll get to meet the Pope himself, but his home city (technically a country of its own) is pretty incredible!",
+    coordinates: [12.453389, 41.902916]
+  },
+  { 
+    name: "St. Peter's Basilica",
+    tags: ["landmark", "religious", "architecture", "history", "cultural", "sightseeing", "cathedral", "ticketed"],
+    description: "Home to Michaelangelo's famous Dome and as breathtaking inside as it is outside, this Basilica is an absolute must-visit in the Vatican City.",
+    coordinates: [12.4539367, 41.9021667]
+  },
+  { 
+    name: "Trevi Fountain",
+    tags: ["landmark", "free entry", "fountain", "sightseeing", "photography", "cultural", "icon"],
+    description: "An icon of Rome, and completely free to visit. Make sure to head there very early if you want to beat the crowds.",
+    coordinates: [12.483313, 41.9009325]
+  },
+  { 
+    name: "Pantheon",
+    tags: ["landmark", "architecture", "history", "basilica", "sightseeing", "ancient Rome", "ticketed"],
+    description: "A basilica with an incredible concrete dome, built between 25 and 27 BC!",
+    coordinates: [12.4768729, 41.8986108]
+  },
+  { 
+    name: "Spanish Steps",
+    tags: ["landmark", "free entry", "architecture", "sightseeing", "cultural", "historic", "iconic"],
+    description: "The famous staircase of Rome! Built in the 18th century, these ornate steps lead you to the Trinità dei Monti church.",
+    coordinates: [12.482775, 41.90599]
+  },
+  { 
+    name: "Stadio Olimpico",
+    tags: ["sports", "stadium", "football", "sightseeing", "events", "ticketed", "cultural"],
+    description: "The home stadium for two Rome football clubs: AS Roma and SS Lazio.",
+    coordinates: [12.4547979, 41.9339383]
+  },
+  { 
+    name: "Piazza Navona",
+    tags: ["square", "free entry", "fountains", "sightseeing", "architecture", "cultural", "photography"],
+    description: "A picturesque square with beautiful fountains.",
+    coordinates: [12.4730719, 41.8991622]
+  },
+  { 
+    name: "Trastevere",
+    tags: ["neighbourhood", "free entry", "streets", "sightseeing", "food", "bars", "culture", "photogenic"],
+    description: "A bustling, bright neighbourhood in Rome with narrow, cobbled streets, colourful buildings and countless bars and restaurants.",
+    coordinates: [12.4704017, 41.8848294]
+  },
+  { 
+    name: "Piazza del Popolo",
+    tags: ["square", "free entry", "architecture", "obelisk", "sightseeing", "historic", "cultural"],
+    description: "A huge, very open square, lined with churches. Home to an ancient obelisk from ancient Egypt.",
+    coordinates: [12.4763579, 41.9107038]
+  },
+  { 
+    name: "Monument to Victor Emmanuel II",
+    tags: ["monument", "history", "sightseeing", "cultural", "architecture", "ticketed", "photography"],
+    description: "A very grand monument dedicated to Italy's first King. Entry to the first level is free, but you have to pay to get on to the terrace for a view of the city.",
+    coordinates: [12.4831269, 41.8945976]
+  },
+  { 
+    name: "Villa Borghese",
+    tags: ["park", "free entry", "gardens", "sculptures", "lake", "sightseeing", "photography", "outdoor"],
+    description: "A huge city centre park filled with sculptures, gardens, villas, museums, and a lake where you can rent a rowing boat.",
+    coordinates: [12.4853818, 41.9138782]
+  },
+  { 
+    name: "Giardino degli Aranci",
+    tags: ["park", "free entry", "viewpoint", "panoramic", "sightseeing", "hidden gem", "photography"],
+    description: "A hidden gem that you need to visit! Giardino degli Aranci is a small, secluded park filled with orange trees.",
+    coordinates: [12.4806625, 41.8849628]
+  },
+  { 
+    name: "Basilica of San Clemente",
+    tags: ["landmark", "basilica", "free entry", "ticketed", "history", "archaeology", "sightseeing", "religious"],
+    description: "A beautiful, typical Roman basilica. Free to enter, but if you want to see the ancient basilica and excavations underground, you'll have to get a ticket.",
+    coordinates: [12.4975757, 41.8893347]
+  },
+  { 
+    name: "Castel Sant'Angelo",
+    tags: ["castle", "history", "art", "architecture", "sightseeing", "cultural"],
+    description: "A fascinating 2nd century castle that is home to a variety of art pieces.",
+    coordinates: [12.466276, 41.9030632]
+  },
+  { 
+    name: "Church of St Antony of the Portuguese",
+    tags: ["church", "free entry", "religious", "sightseeing", "architecture", "cultural"],
+    description: "A beautiful catholic church in central Rome.",
+    coordinates: [12.4744577, 41.9019189]
+  },
+  { 
+    name: "Vatican Museums",
+    tags: ["museum", "art", "galleries", "gardens", "sightseeing", "cultural"],
+    description: "A collection of galleries and gardens in the Vatican City, home to a variety of classical art pieces.",
+    coordinates: [12.4536413, 41.9064878]
+  },
+  { 
+    name: "Papal Basilica of Saint Mary Major",
+    tags: ["basilica", "religious", "architecture", "sightseeing", "cultural", "free entry"],
+    description: "Another traditional Basilica in central Rome.",
+    coordinates: [12.4984084, 41.8975986]
+  },
+  { 
+    name: "Giardini di Palazzo Venezia",
+    tags: ["courtyard", "free entry", "gardens", "sightseeing", "quiet", "cultural", "historic"],
+    description: "A small but stunning courtyard by the \"Venezia\" Palace in Rome.",
+    coordinates: [12.4815269, 41.8959277]
+  },
+  { 
+    name: "National Museum of the Palazzo di Venezia",
+    tags: ["museum", "palace", "history", "ticketed", "sightseeing", "architecture", "cultural"],
+    description: "A majestic 15th century home that is open to the public, and now also houses a museum.",
+    coordinates: [12.4813787, 41.8964485]
+  },
+  { 
+    name: "Monti Neighbourhood",
+    tags: ["neighbourhood", "free entry", "streets", "sightseeing", "cafes", "bars", "photogenic", "cultural"],
+    description: "A gorgeous neighbourhood close to the Colosseum with bright, colourful buildings, picturesque streets, and a great selection of cafes and bars.",
+    coordinates: [12.4925226, 41.8947077]
+  },
+  { 
+    name: "Rampa Angelica viewpoint",
+    tags: ["viewpoint", "free entry", "panoramic", "sightseeing", "photography", "park", "cultural"],
+    description: "A viewpoint with panoramic scenery - part of Villa Borghese.",
+    coordinates: [12.4806403, 41.9092511]
+  },
+  { 
+    name: "Tiber Island",
+    tags: ["island", "free entry", "historic", "sightseeing", "bridge", "river", "cultural"],
+    description: "An island in the middle of the River Tiber. It's tiny - it only has one restaurant, one ice cream shop, a pharmacy and a hospital.",
+    coordinates: [12.4777395, 41.8904524]
+  },
+  { 
+    name: "Circus Maximus",
+    tags: ["stadium", "free entry", "historic", "ancient Rome", "park", "sightseeing", "outdoor"],
+    description: "An ancient Roman chariot-racing stadium that now serves as a public park and even an outdoor entertainment space.",
+    coordinates: [12.4857578, 41.8858762]
+  },
+  { 
+    name: "Bar San Calisto",
+    tags: ["bar", "casual", "drinks", "affordable", "local", "wine", "prosecco", "nightlife", "social"],
+    description: "A casual bar offering very affordable beers and prosecco.",
+    coordinates: [12.4708035, 41.8890617]
+  },
+  { 
+    name: "Bar River",
+    tags: ["bar", "casual", "riverside", "drinks", "local", "social", "nightlife", "casual vibes"],
+    description: "A casual riverside bar, not far from the football stadium.",
+    coordinates: [12.4603832, 41.9323933]
+  },
+  { 
+    name: "Retrobottega",
+    tags: ["cafe-bar", "wine", "coffee", "snacks", "cobblestone", "corner", "casual", "stylish", "drinks"],
+    description: "A stunning cafe-bar on a corner of a cobblestone street. They have a great wine selection, but also have coffee and snacks available too.",
+    coordinates: [12.475204, 41.9019254]
+  },
+  { 
+    name: "404 Name Not Found",
+    tags: ["cocktail bar", "drinks", "Trastevere", "wine", "beer", "spirits", "nightlife", "social", "trendy"],
+    description: "A great cocktail bar in the heart of Trastevere also selling a selection of wines, beers and spirits.",
+    coordinates: [12.4771566, 41.8875984]
+  },
+  { 
+    name: "Enoteca CUVERIE",
+    tags: ["wine bar", "wine", "Trastevere", "drinks", "casual", "tasting", "social", "relaxed"],
+    description: "An amazing wine bar in the heart of Trastevere.",
+    coordinates: [12.477274, 41.887581]
+  },
+  { 
+    name: "Il Cesaretto",
+    tags: ["wine bar", "aperitivo", "outdoor", "drinks", "wine", "casual", "street", "social", "Italian"],
+    description: "A fantastic wine bar. Sit outside on a beautiful street by a barrel and enjoy a typical aperitivo or a glass of one of the many wines on offer.",
+    coordinates: [12.4796075, 41.9067726]
+  },
+  { 
+    name: "ADESSO Osteria Moderna",
+    tags: ["restaurant", "Roman cuisine", "traditional", "reviews", "interior", "food", "dining", "local", "Italian"],
+    description: "",
+    coordinates: [12.4736855, 41.9017648]
+  },
+  { 
+    name: "Osteria Mamma Mia",
+    tags: ["restaurant", "Roman cuisine", "traditional", "Cacio e Pepe", "quiet", "neighbourhood", "food", "dining", "local"],
+    description: "A typical Roman restaurant in a quiet neighbourhood near the river. They serve amazing Cacio e Pepe!",
+    coordinates: [12.4646157, 41.924487]
+  },
+  { 
+    name: "La Fata Ignorante",
+    tags: ["restaurant", "rooftop", "Italian cuisine", "highly rated", "service", "food", "dining", "views", "modern"],
+    description: "A highly rated rooftop restaurant with exceptional service.",
+    coordinates: [12.4952604, 41.9004883]
+  },
+  { 
+    name: "Enoteca Corsi",
+    tags: ["restaurant", "Roman cuisine", "traditional", "cosy", "local wine", "food", "dining", "Italian"],
+    description: "A cosy Roman restaurant with fantastic traditional dishes and local wines.",
+    coordinates: [12.4787834, 41.8968706]
+  },
+  { 
+    name: "Trattoria Monti",
+    tags: ["trattoria", "cosy", "home-style", "food", "local wine", "Italian cuisine", "dining", "traditional"],
+    description: "A cosy trattoria offering home-style, comforting dishes and a selection of local wines.",
+    coordinates: [12.5019557, 41.8956851]
+  },
+  { 
+    name: "Ai Tre Scalini",
+    tags: ["restaurant", "Monti", "fresh food", "wine", "spritz", "highly rated", "dining", "Italian"],
+    description: "A stunning restaurant in the Monti area with highly-rated, fresh food and a range of wines & spritzes.",
+    coordinates: [12.4905105, 41.8962822]
+  },
+  { 
+    name: "Roma Sparita",
+    tags: ["restaurant", "Trastevere", "Cacio e Pepe", "bustling", "Italian cuisine", "traditional", "food", "dining"],
+    description: "A bustling restaurant in Trastevere, known for their incredible Cacio e Pepe served in a parmesan nest.",
+    coordinates: [12.4768406, 41.8874433]
+  },
+  { 
+    name: "La Famiglia",
+    tags: ["restaurant", "central Rome", "Italian cuisine", "pasta", "traditional", "wine", "food", "dining", "local"],
+    description: "A central Rome restaurant with incredible food, a large choice of pastas and second plates, with a good wine selection. Their traditional set menu is a must-try (but you need to be hungry!)",
+    coordinates: [12.5005389, 41.9044294]
+  },
+  { 
+    name: "Il gelato di Costanza",
+    tags: ["gelato", "cafe", "dessert", "ice cream", "quick bite", "Colosseum", "Circus Maximus", "Italian"],
+    description: "A gelato shop, close to the Colosseum and Circus Maximus, with high-quality ingredients and great service.",
+    coordinates: [12.4951931, 41.8897593]
+  },
+  { 
+    name: "Pastasciutta",
+    tags: ["fast food", "pasta", "chain", "quick bite", "affordable", "Italian", "local", "casual"],
+    description: "A fast-pasta chain. This is just one example, you'll find lots of stores dotted around the city. They sell freshly made pasta with a variety of sauces for as little as €6!",
+    coordinates: [12.4753354, 41.9120253]
+  },
+  { 
+    name: "Bono Bottega Nostrana",
+    tags: ["sandwich", "panini", "fast food", "fresh", "quick service", "cafe", "Italian", "casual"],
+    description: "A fantastic sandwich & panini shop, just outside the Vatican City, offering very fresh food and quick service.",
+    coordinates: [12.4535353, 41.899535]
+  },
+  { 
+    name: "Giolitti",
+    tags: ["cafe", "gelato", "pastries", "coffee", "dessert", "Italian", "traditional", "quick bite"],
+    description: "Incredible traditional Italian cafe and gelateria with authentic pastries, coffee and gelato. Well worth a visit!",
+    coordinates: [12.4772026, 41.9010245]
+  },
+  { 
+    name: "Tiramisú Merisù",
+    tags: ["dessert", "tiramisu", "cafe", "quick bite", "affordable", "Italian", "sweet", "pastries"],
+    description: "Quick, delicious and affordable tiramisu - need we say more?",
+    coordinates: [12.4719782, 41.8870495]
+  },
+  { 
+    name: "Mangia Calabrese",
+    tags: ["deli", "cafe", "sandwiches", "hidden gem", "local", "Italian", "friendly", "quick bite"],
+    description: "Deli and cafe / bar offering potentially the best sandwiches ever. A true local, hidden gem.",
+    coordinates: [12.4754124, 41.9020132]
+  }
+];
+
+const directionsLinks = {
+  "Colosseum": "https://www.google.com/maps?cid=2950359333223072708",
+  "Roman Forum": "https://maps.google.com/?cid=18055282783150702054",
+  "Vatican City": "https://maps.google.com/?cid=2620800624131760",
+  "St. Peter's Basilica": "https://maps.google.com/?cid=8235940740917056131",
+  "Trevi Fountain": "https://maps.google.com/?cid=17759648132674796470",
+  "Pantheon": "https://maps.google.com/?cid=14614574390750662188",
+  "Spanish Steps": "https://maps.google.com/?cid=9205591385677129999",
+  "Stadio Olimpico": "https://maps.google.com/?cid=8726887349026686487",
+  "Piazza Navona": "https://maps.google.com/?cid=18314629913600258303",
+  "Trastevere": "https://maps.google.com/?cid=11790177703383004723",
+  "Piazza del Popolo": "https://maps.google.com/?cid=4895025766821938000",
+  "Monument to Victor Emmanuel II": "https://maps.google.com/?cid=2383890775478386657",
+  "Villa Borghese": "https://maps.google.com/?cid=16950841178214075972",
+  "Giardino degli Aranci": "https://www.google.com/maps?cid=268412999884687609",
+  "Basilica of San Clemente": "https://maps.google.com/?cid=10944091131811574097",
+  "Castel Sant'Angelo": "https://www.google.com/maps/place/Castel+Sant'Angelo/@41.9030632,12.466276,17z/data=!3m1!4b1!4m6!3m5!1s0x13258a8711e7a4d1:0x366c111ce77d4189!8m2!3d41.9030632!4d12.466276!16zL20vMDFyanFi?entry=ttu&g_ep=EgoyMDI1MDkzMC4wIKXMDSoASAFQAw%3D%3D",
+  "Church of St Antony of the Portuguese": "https://maps.google.com/?cid=16279389815513178818",
+  "Vatican Museums": "https://maps.google.com/?cid=14979232533955483318",
+  "Papal Basilica of Saint Mary Major": "https://maps.google.com/?cid=17848703187621262714",
+  "Giardini di Palazzo Venezia": "https://maps.google.com/?cid=4073688928848989168",
+  "National Museum of the Palazzo di Venezia": "https://maps.google.com/?cid=1290923477506367195",
+  "Monti Neighbourhood": "https://maps.google.com/?cid=12792697629613305124",
+  "Rampa Angelica viewpoint": "https://maps.google.com/?q=Rampa+Angelica+Kauffmann,+00187+Roma+RM,+Italia&ftid=0x132f60ff6cc3de13:0x5027d4e785e99093",
+  "Tiber Island": "https://maps.google.com/?cid=4058950759616737996",
+  "Circus Maximus": "https://maps.google.com/?cid=7498790222707612012",
+  "Bar San Calisto": "https://maps.google.com/?cid=1327815495698668467",
+  "Bar River": "https://maps.google.com/?cid=5151596433267734073",
+  "Retrobottega": "https://maps.google.com/?cid=7851146073382502784",
+  "404 Name Not Found": "https://maps.google.com/?cid=4498611289477535771",
+  "Enoteca CUVERIE": "https://maps.google.com/?cid=14612739985875680205",
+  "Il Cesaretto": "https://maps.google.com/?cid=783230959518630646",
+  "ADESSO Osteria Moderna": "https://www.google.com/maps/place/ADESSO+Osteria+Moderna/@41.9021228,12.4847452,17z/data=!4m8!3m7!1s0x132f61c6720a265f:0x81d280db9067d060!8m2!3d41.9021228!4d12.4847452!9m1!1b1!16s%2Fg%2F11s96cwx1r?entry=ttu&g_ep=EgoyMDI1MDkzMC4wIKXMDSoASAFQAw%3D%3D",
+  "Osteria Mamma Mia": "https://www.google.com/maps/place/Osteria+Mamma+Mia/@41.9244991,12.4645105,17z/data=!4m15!1m8!3m7!1s0x132f60ec79e5cc91:0xd87406edfb5257a7!2sOsteria+Mamma+Mia!8m2!3d41.924487!4d12.4646157!10e9!16s%2Fg%2F113f09jkd!3m5!1s0x132f60ec79e5cc91:0xd87406edfb5257a7!8m2!3d41.924487!4d12.4646157!16s%2Fg%2F113f09jkd?entry=ttu&g_ep=EgoyMDI1MDkzMC4wIKXMDSoASAFQAw%3D%3D",
+  "La Fata Ignorante": "https://maps.google.com/?cid=2799219178126130218",
+  "Enoteca Corsi": "https://maps.google.com/?cid=3935991939893424995",
+  "Trattoria Monti": "https://maps.google.com/?cid=2724446657651913607",
+  "Ai Tre Scalini": "https://maps.google.com/?cid=7784424395342518925",
+  "Roma Sparita": "https://maps.google.com/?cid=8554172228006092530",
+  "La Famiglia": "https://maps.google.com/?cid=17742653123503085598",
+  "Il gelato di Costanza": "https://maps.google.com/?cid=7189819144087366884",
+  "Pastasciutta": "https://maps.google.com/?cid=16176506951585528486",
+  "Bono Bottega Nostrana": "https://maps.google.com/?cid=11632686072795893943",
+  "Giolitti": "https://www.google.com/maps/place/Giolitti/@41.9010245,12.4772026,17z/data=!3m1!4b1!4m6!3m5!1s0x132f60519cfa737b:0x38610a40a28f8107!8m2!3d41.9010245!4d12.4772026!16s%2Fg%2F11b7r_pys_?entry=ttu&g_ep=EgoyMDI1MTAwMS4wIKXMDSoASAFQAw%3D%3D",
+  "Tiramisú Merisù": "https://maps.google.com/?cid=2721460229575787441",
+  "Mangia Calabrese": "https://maps.google.com/?cid=11916620935811897154",
+  "Antico Caffe Del Brasile": "https://maps.google.com/?cid=17812067994878161727",
+  "Gelateria Tiberino Roma": "https://maps.google.com/?cid=13958607762628621849"
+};
+
+const ticketLinks = {
+  "Colosseum": "https://ticketing.colosseo.it/en/",
+  "Roman Forum": "https://ticketing.colosseo.it/en/",
+  "St. Peter's Basilica": "https://www.basilicasanpietro.va/en/products",
+  "Pantheon": "https://portale.museiitaliani.it/b2c/buyTicketless/33f77159-0acd-40c4-8524-701f33aae108",
+  "Stadio Olimpico": "https://www.tiqets.com/en/stadio-olimpico-tickets-l201695/?partner=dingo_marketing_team",
+  "Monument to Victor Emmanuel II": "https://vive.cultura.gov.it/en/vittoriano",
+  "Basilica of San Clemente": "https://www.basilicasanclemente.com/prenota/",
+  "Castel Sant'Angelo": "https://ecm.coopculture.it/index.php?option=com_snapp&view=products&snappTemplate=template3&catalogid=DC4BA52F-38B6-C624-3EE4-019349DCB9E6&lang=en&cartSessionId=",
+  "National Museum of the Palazzo di Venezia": "https://vive.midaticket.com/en/",           
+  "Vatican Museums": "https://www.museivaticani.va/content/museivaticani/en/organizza-visita/tariffe-e-biglietti.html"
+};
+
+const ticketPrices = {
+  "Colosseum": "From €24",
+  "Roman Forum": "From €24",
+  "St. Peter's Basilica": "Variable",
+  "Pantheon": "€5",
+  "Stadio Olimpico": "Variable",
+  "Monument to Victor Emmanuel II": "Variable",
+  "Basilica of San Clemente": "€10",
+  "Castel Sant'Angelo": "€16",
+  "National Museum of the Palazzo di Venezia": "€16"
+};
+
+  const fuse = new Fuse(savedPoints, {
+    keys: ['name', 'tags'],
+    threshold: 0.4,
+    ignoreLocation: true,
+    includeScore: true
+  });
+
+  const searchInput = document.getElementById('search');
+  const suggestionsDiv = document.getElementById('suggestions');
+  let currentPopup = null;
+  let allFeatures = [];
+  let popupOpenedByClick = false
+  let popupHovering = false;
+
+  function isMobile() {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }
+
+function createPopup(feature, lngLat, clicked = false) {
+  if (currentPopup) {
+    currentPopup.remove();
+    currentPopup = null;
+  }
+
+  popupOpenedByClick = clicked;
+  popupHovering = false;
+
+  const name = feature.properties?.name || feature.properties?.Name || feature.properties?.title || "No title";
+  const description = feature.properties?.description || feature.properties?.Description || "No description";
+  const directions = directionsLinks[name] || `https://www.google.com/maps/search/${encodeURIComponent(name)}`;
+
+  // Determine if this place has ticketed access
+  const hasTicketLink = ticketLinks[name];
+  const isFreeEntry = feature.properties?.tags?.includes('free entry') || savedPoints.find(p => p.name === name)?.tags.includes('free entry');
+
+  // Build ticket button HTML
+  let ticketButtonHTML = '';
+ if (hasTicketLink && !isFreeEntry) {
+  ticketButtonHTML = `<a href="${ticketLinks[name]}" class="directions-btn" target="_blank">🎟️ Direct Ticket Link</a>`;
+} else if (isFreeEntry) {
+  ticketButtonHTML = `<span class="free-entry-btn">🎉 Free Entry</span>`;
+}
+
+  currentPopup = new mapboxgl.Popup({ closeButton: false })
+    .setLngLat(lngLat)
+    .setHTML(`
+      <div class="custom-popup">
+        <strong>${name}</strong>
+        <p>${description}</p>
+        <a href="${directions}" class="directions-btn" target="_blank">📍 Directions</a>
+        ${ticketButtonHTML}
+      </div>
+    `)
+    .addTo(map);
+
+  const popupEl = document.querySelector(".mapboxgl-popup");
+  if (popupEl) {
+    popupEl.addEventListener("mouseenter", () => { popupHovering = true; });
+    popupEl.addEventListener("mouseleave", () => {
+      popupHovering = false;
+      if (!popupOpenedByClick && currentPopup) {
+        currentPopup.remove();
+        currentPopup = null;
+      }
+    });
+  }
+}
+
+function searchAndZoomToFeature(name) {
+  const lowerName = name.toLowerCase();
+
+  // 1️⃣ Check currently loaded source features
+  for (let feature of allFeatures) {
+    const featureName = feature.properties?.name || feature.properties?.Name || feature.properties?.title;
+    if (featureName && featureName.toLowerCase().includes(lowerName)) {
+      const coords = feature.geometry.coordinates;
+      map.flyTo({ center: coords, zoom: 17 });
+      setTimeout(() => createPopup(feature, coords, true), 300);
+      return;
+    }
+  }
+
+  // 2️⃣ Check currently rendered features (fallback)
+  const allRenderedFeatures = map.queryRenderedFeatures();
+  for (let feature of allRenderedFeatures) {
+    const featureName = feature.properties?.name || feature.properties?.Name || feature.properties?.title;
+    if (featureName && featureName.toLowerCase().includes(lowerName)) {
+      const coords = feature.geometry.coordinates;
+      map.flyTo({ center: coords, zoom: 17 });
+      setTimeout(() => createPopup(feature, coords, true), 300);
+      return;
+    }
+  }
+
+  // 3️⃣ Fallback to savedPoints (global data)
+  const matchingPoint = savedPoints.find(p => p.name.toLowerCase().includes(lowerName));
+  if (matchingPoint) {
+    if (matchingPoint.coordinates) {
+      map.flyTo({ center: matchingPoint.coordinates, zoom: 17 });
+      setTimeout(() => {
+        createPopup(
+          { properties: { name: matchingPoint.name, description: matchingPoint.tags.join(', ') }, geometry: { coordinates: matchingPoint.coordinates } },
+          matchingPoint.coordinates,
+          true
+        );
+      }, 300);
+    } else {
+      alert(`"${matchingPoint.name}": We can't find this location right now. Please try again later.`);
+    }
+    return;
+  }
+
+  // 4️⃣ Not found anywhere
+  alert(`Can't find what you're looking for? It must not be somewhere we've tried & tested for you yet! Why not try a Google Search instead?`);
+}
+
+  searchInput.addEventListener('input', () => {
+    const query = searchInput.value.trim();
+    suggestionsDiv.innerHTML = '';
+    if (!query) {
+      savedPoints.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'suggestion';
+        div.textContent = item.name;
+        div.onclick = () => {
+          searchInput.value = item.name;
+          suggestionsDiv.innerHTML = '';
+          searchAndZoomToFeature(item.name);
+        };
+        suggestionsDiv.appendChild(div);
+      });
+      return;
+    }
+    const results = fuse.search(query);
+    if (results.length) {
+      results.forEach(({ item }) => {
+        const div = document.createElement('div');
+        div.className = 'suggestion';
+        div.textContent = item.name;
+        div.onclick = () => {
+          searchInput.value = item.name;
+          suggestionsDiv.innerHTML = '';
+          searchAndZoomToFeature(item.name);
+        };
+        suggestionsDiv.appendChild(div);
+      });
+    } else {
+      const div = document.createElement('div');
+      div.className = 'no-results';
+      div.textContent = "Can't find what you're looking for? It must not be somewhere we've tried & tested for you yet! Why not try a Google Search instead?";
+      suggestionsDiv.appendChild(div);
+    }
+  });
+
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const query = searchInput.value.trim();
+      const result = fuse.search(query)[0];
+      if (result) {
+        searchAndZoomToFeature(result.item.name);
+        suggestionsDiv.innerHTML = '';
+      }
+    }
+  });
+
+  searchInput.addEventListener('focus', () => searchInput.dispatchEvent(new Event('input')));
+
+  document.addEventListener('click', function (event) {
+    const isClickInside = searchInput.contains(event.target) || suggestionsDiv.contains(event.target);
+    if (!isClickInside) {
+      suggestionsDiv.innerHTML = '';
+    }
+  });
+
+  map.on('load', () => {
+    const layers = ['landmarks', 'restaurants', 'bars', 'cafes', 'sightseeing'];
+    const layerCheckboxes = {
+  landmarks: document.getElementById('toggle-landmarks'),
+  restaurants: document.getElementById('toggle-restaurants'),
+  bars: document.getElementById('toggle-bars'),
+  cafes: document.getElementById('toggle-cafes'),
+  sightseeing: document.getElementById('toggle-sightseeing')
+};
+    const layerToSourceLayer = {
+      'landmarks': 'RomeLandmarks-8mtkzj',
+      'restaurants': 'RomeRestaurants-2wgvle',
+      'bars': 'RomeBars-6lcmw6',
+      'cafes': 'RomeCafes-00fa0z',
+      'sightseeing': 'RomeSightseeing-0dtiw5'
+    };
+    const sourceId = 'composite';
+
+    function loadAllFeatures() {
+      layers.forEach(layer => {
+        const sourceLayer = layerToSourceLayer[layer];
+        try {
+          const sourceFeatures = map.querySourceFeatures(sourceId, {
+            sourceLayer: sourceLayer
+          });
+          sourceFeatures.forEach(feature => {
+            const isDuplicate = allFeatures.some(existing => 
+              existing.properties && feature.properties &&
+              existing.properties.name === feature.properties.name
+            );
+            if (!isDuplicate && feature.properties && feature.properties.name) {
+              allFeatures.push(feature);
+            }
+          });
+        } catch (error) {
+          const renderedFeatures = map.queryRenderedFeatures({ layers: [layer] });
+          renderedFeatures.forEach(feature => {
+            const isDuplicate = allFeatures.some(existing => 
+              existing.properties && feature.properties &&
+              existing.properties.name === feature.properties.name
+            );
+            if (!isDuplicate && feature.properties && feature.properties.name) {
+              allFeatures.push(feature);
+            }
+          });
+     }
+      });
+    }
+
+    map.on('data', (e) => {
+      if (e.dataType === 'source' && e.sourceId === sourceId) {
+        allFeatures = [];
+        loadAllFeatures();
+      }
+    });
+
+    map.once('idle', () => {
+      if (allFeatures.length === 0) {
+        loadAllFeatures();
+      }
+    });
+Object.entries(layerCheckboxes).forEach(([layerId, checkbox]) => {
+  if (!checkbox) return;
+
+  checkbox.addEventListener('change', (e) => {
+    const visibility = e.target.checked ? 'visible' : 'none';
+
+    // Toggle the main layer
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, 'visibility', visibility);
+    } else {
+      console.warn(`Layer not found: ${layerId}`);
+    }
+
+    // Also toggle matching circle layers if they exist
+    if (layerId === 'landmarks' && map.getLayer('landmarkscircle')) {
+      map.setLayoutProperty('landmarkscircle', 'visibility', visibility);
+    }
+
+    if (layerId === 'sightseeing' && map.getLayer('sightseeingcircle')) {
+      map.setLayoutProperty('sightseeingcircle', 'visibility', visibility);
+    }
+  });
+});
+if (!isMobile()) {
+  layers.forEach(layer => {
+    // Hover: show popup (not locked)
+    map.on('mouseenter', layer, e => {
+      map.getCanvas().style.cursor = 'pointer';
+      createPopup(e.features[0], e.lngLat, false);
+    });
+
+    // When leaving the marker: wait a short tick and only close if
+    // not hovering the popup and not clicked (locked)
+    map.on('mouseleave', layer, () => {
+      map.getCanvas().style.cursor = '';
+      setTimeout(() => {
+        if (!popupOpenedByClick && !popupHovering && currentPopup) {
+          currentPopup.remove();
+          currentPopup = null;
+        }
+      }, 40); // tiny delay to allow mouse to enter popup
+    });
+
+    // Click on marker: open popup and lock it (until clicking map background)
+    map.on('click', layer, e => {
+      if (currentPopup) currentPopup.remove();
+      createPopup(e.features[0], e.lngLat, true);
+    });
+  });
+}else {
+    // Mobile: only click to open popup (no hover)
+    layers.forEach(layer => {
+        map.on('click', layer, e => {
+        if (currentPopup) currentPopup.remove();
+        createPopup(e.features[0], e.lngLat, true);
+        });
+    });
+}
+    // Click on map background: close any open popup
+    map.on('click', (e) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: layers });
+      if (features.length === 0 && currentPopup) {
+        currentPopup.remove();
+        currentPopup = null;
+        popupOpenedByClick = false;
+      }
+    });
+  });
+</script>
+</body>
+</html> 
