@@ -210,6 +210,27 @@
     background-size: auto;
     background-repeat: no-repeat;
   }
+  /* --- Fix mobile touch / stacking issue for UI elements --- */
+#search-container,
+#suggestions,
+#layer-toggle {
+  position: absolute;
+  z-index: 9999; /* keep UI above mapbox canvas */
+  pointer-events: auto; /* ensure taps are registered */
+}
+
+.mapboxgl-canvas {
+  z-index: 0 !important; /* map stays below overlays */
+}
+
+.mapboxgl-control-container {
+  z-index: 10;
+}
+
+/* Helps mobile Safari/Chrome register taps correctly */
+#search-container * {
+  touch-action: manipulation;
+}
 </style>
 </head>
 <body>
