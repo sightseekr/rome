@@ -356,6 +356,13 @@
   <label><input type="checkbox" id="toggle-cafes" checked> <span class="icon icon-cafe"></span> Cafes & Quick Bites</label>
 </div></div>
 <script>
+    window.addEventListener('DOMContentLoaded', () => {
+  if (localStorage.getItem('authenticated') === 'true') {
+    document.getElementById('login-page').style.display = 'none';
+    document.getElementById('map-container').style.display = 'block';
+    initializeMap();
+  }
+});
      const CORRECT_PASSWORD = "abc";
 let map;
 
@@ -365,6 +372,7 @@ document.getElementById('login-form').addEventListener('submit', function(e) {
   const input = document.getElementById('password').value;
   
   if (input === CORRECT_PASSWORD) {
+    localStorage.setItem('authenticated', 'true');
     document.getElementById('login-page').style.display = 'none';
     document.getElementById('map-container').style.display = 'block';
     initializeMap();
